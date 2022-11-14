@@ -35,5 +35,5 @@ For every future experiments, we will create a new directory under `experiments`
 3. **Train** your experiment. Simply run
 
 ```
-python train.py --data_dir data/64x64_SIGNS --model_dir experiments/base_model
+python train.py --data_dir data/visits --model_dir experiments/base_model
 ```
