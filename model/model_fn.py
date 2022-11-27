@@ -3,6 +3,7 @@
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
+from tensorboard.plugins.hparams import api as hp
 
 def build_model(is_training, output_shape, inputs, params):
     """Compute logits of the model (output distribution)
@@ -18,19 +19,36 @@ def build_model(is_training, output_shape, inputs, params):
     """
     #Merge feature inputs into one vector
     all_features = tf.keras.layers.concatenate(inputs['encoded_features'])
-    x = tf.keras.layers.Dense(50, activation="relu")(all_features)
-    #x=tf.keras.layers.Dropout(0.4)(x)
-    x = tf.keras.layers.Dense(200, activation="relu")(x)
-    #x=tf.keras.layers.Dropout(0.6)(x)
-    x = tf.keras.layers.Dense(450, activation="relu")(x)
-    #x=tf.keras.layers.Dropout(0.6)(x)
-    #x=tf.keras.layers.Dropout(0.4)(x)
+    print(params)
+    #Create HParams as model hyperparameter
+    hp_dropout = params['HP_DROPOUT']
+    hp_num_units = params['HP_NUM_UNITS']
+    
+    x = tf.keras.layers.Dense(hp_num_units, activation="relu")(all_features)
+    x=tf.keras.layers.Dropout(hp_dropout)(x)
+    x = tf.keras.layers.Dense(292, activation="relu")(x)
+    x=tf.keras.layers.Dropout(hp_dropout)(x)
+    x = tf.keras.layers.Dense(584, activation="relu")(x)
+    x=tf.keras.layers.Dropout(hp_dropout)(x)
+    x = tf.keras.layers.Dense(2336, activation="relu")(x)
+    x=tf.keras.layers.Dropout(hp_dropout)(x)
+    x = tf.keras.layers.Dense(4672, activation="relu")(x)
+    x=tf.keras.layers.Dropout(hp_dropout)(x)
+    x = tf.keras.layers.Dense(1168, activation="relu")(x)
+    x=tf.keras.layers.Dropout(hp_dropout)(x)
+    x = tf.keras.layers.Dense(584, activation="relu")(x)
+    x=tf.keras.layers.Dropout(hp_dropout)(x)
+    #x = tf.keras.layers.Dense(5000, activation="relu")(x)
+    #x=tf.keras.layers.Dropout(0.7)(x)
     #x = tf.keras.layers.Dense(1000, activation="relu")(x)
-    #x = tf.keras.layers.Dense(600, activation="relu")(x)
+    #x=tf.keras.layers.Dropout(0.6)(x)
+    #x = tf.keras.layers.Dense(1200, activation="relu")(x)
+    #x=tf.keras.layers.Dropout(0.7)(x)
     #x = tf.keras.layers.Dense(300, activation="relu")(x)
-    #x=tf.keras.layers.Dropout(0.5)(x)
-    #x = tf.keras.layers.Dense(500, activation="relu")(x)
-    #x=tf.keras.layers.Dropout(0.5)(x)
+    #x=tf.keras.layers.Dropout(0.7)(x)
+    #x = tf.keras.layers.Dense(190, activation="relu")(x)
+    #x=tf.keras.layers.Dropout(0.7)(x)
+    
     output = tf.keras.layers.Dense(output_shape, activation="softmax")(x)
 
     model = keras.Model(inputs['all_inputs'], output)
@@ -58,13 +76,17 @@ def model_fn(mode, inputs, output_shape, params, reuse=False):
     model = build_model(is_training, output_shape, inputs, params)
 
     # Define loss and accuracy
-    loss = loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True)
+    loss = loss=tf.keras.losses.CategoricalCrossentropy(from_logits=False)
     accuracy = ["accuracy"]
     optimizer = 'adam'
 
+    #learning rate hyperparameter
+    hp_learningrate = params['HP_LEARNINGRATE']
+
     # Define training step that minimizes the loss with the Adam optimizer
-    if is_training:
-        optimizer = tf.keras.optimizers.Adam(params.learning_rate)
+    optimizer = tf.keras.optimizers.Adam(hp_learningrate)
+
+    #if is_training:
         #global_step = tf.train.get_or_create_global_step()
         #if params.use_batch_norm:
             # Add a dependency to update the moving mean and variance for batch normalization

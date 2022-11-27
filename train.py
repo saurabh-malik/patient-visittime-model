@@ -6,6 +6,7 @@ import os
 import random
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot
 
 import tensorflow as tf
 
@@ -16,6 +17,8 @@ from model.model_fn import model_fn
 from model.encoder import get_category_encoding_layer
 from model.encoder import get_normalization_layer
 from sklearn.model_selection import train_test_split
+from tensorboard.plugins.hparams import api as hp
+from model.training import train_and_evaluate
 
 
 parser = argparse.ArgumentParser()
@@ -59,28 +62,27 @@ if __name__ == '__main__':
 
     #DataLoad & Split
     #Dataload
-    file = args.data_dir + "/visitdataclassification-1000.csv"
+    file = args.data_dir + "/visitdataclassification-4300.csv"
     dataframe = pd.read_csv(file)
     dataframe.head()
 
     #Create Target Variable as One hot encode
-    onehotecode = pd.get_dummies(dataframe['TotalTimeInWindow-30'], prefix='timewindow')
+    #onehotecode = pd.get_dummies(dataframe['TotalTimeInWindow-15'], prefix='timewindow', sparse=True)
+    onehotecode = pd.get_dummies(dataframe['TotalTimeInWindow-15'], prefix='timewindow', sparse=True)
     y = onehotecode.values
     output_shape = y.shape[1]
 
+    print('output_shape: ', output_shape)
+
     #Drop Unused feature
-    dataframe = dataframe.drop(columns=['TotalTimeInMin', 'VisitEnvelopeId', 'IsDropoffAppointment', 'TotalTimeInWindow-30'])
+    dataframe = dataframe.drop(columns=['TotalTimeInMin', 'VisitEnvelopeId', 'IsDropoffAppointment', 'TotalTimeInWindow-30', 'TotalTimeInWindow-15'])
 
     #Split Data
     
-    train_x, hold_x, train_y, hold_y = train_test_split(dataframe, y, test_size=0.20)
+    train_x, hold_x, train_y, hold_y = train_test_split(dataframe, y, test_size=0.40)
     val_x, test_x, val_y, test_y = train_test_split(hold_x, hold_y, test_size=0.50)
 
     #train, val, test = np.split(dataframe.sample(frac=1), [int(0.8*len(dataframe)), int(0.9*len(dataframe))])
-
-    print(len(train_x), 'training examples')
-    print(len(val_x), 'validation examples')
-    print(len(test_x), 'test examples')
 
     batch_size = params.batch_size
     train_ds = df_to_dataset(train_x, train_y, batch_size=batch_size)
@@ -118,13 +120,21 @@ if __name__ == '__main__':
 
     logging.info("Creating the model...")
     #train_inputs()
-    waiting_model = model_fn('train', train_inputs, output_shape, params)
+    #Hyperparameter
+    HP_NUM_UNITS = hp.HParam('num_units', hp.Discrete([params.num_units]))
+    HP_DROPOUT = hp.HParam('dropout_rate', hp.Discrete([params.dropout_rate]))
+    HP_LEARNINGRATE = hp.HParam('learning_rate', hp.Discrete([params.learning_rate]))
+    METRIC_ACCURACY = 'accuracy'
+    hparams = {
+          'HP_NUM_UNITS': params.num_units,
+          'HP_DROPOUT': params.dropout_rate,
+          'HP_LEARNINGRATE': params.learning_rate
+      }
+
+    #print({h.name: hparams[h] for h in hparams})
+
+    waiting_model = model_fn('train', train_inputs, output_shape, hparams)
     #eval_model_spec = model_fn('eval', eval_inputs, params, reuse=True)
 
-    tf.keras.utils.plot_model(waiting_model, "Baseline_model.png")
-
-    # Train the model
-    logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
-    waiting_model.fit(train_ds, epochs=params.num_epochs, validation_data = val_ds)
-    #loss, accuracy = waiting_model.evaluate(test_ds)
-    #print("Accuracy", accuracy)
+    #train and evaluate model
+    train_and_evaluate(waiting_model, args.data_dir, hparams)
