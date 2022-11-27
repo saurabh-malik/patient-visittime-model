@@ -3,7 +3,7 @@ import os
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as hp
 
-def train_and_evaluate(model, eval_model_spec, model_dir, hparams, restore_from=None):
+def train_and_evaluate(model, data_set, model_dir, hparams, params, restore_from=None):
     """Train the model and evaluate every epoch.
 
     Args:
@@ -21,10 +21,14 @@ def train_and_evaluate(model, eval_model_spec, model_dir, hparams, restore_from=
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=0)
     hpboard_callback = hp.KerasCallback(log_dir, hparams)
 
+    train_ds = data_set['train_ds']
+    val_ds = data_set['val_ds']
+    test_ds = data_set['test_ds']
+
     logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
     with tf.summary.create_file_writer(log_dir).as_default():
         hp.hparams(hparams)  # record the values used in this trial
-        waiting_model.fit(train_ds, epochs=params.num_epochs, validation_data = val_ds, callbacks=[tensorboard_callback, hpboard_callback])
-        oss, accuracy = waiting_model.evaluate(test_ds)
+        model.fit(train_ds, epochs=params.num_epochs, validation_data = val_ds, callbacks=[tensorboard_callback, hpboard_callback])
+        oss, accuracy = model.evaluate(test_ds)
         #accuracy = train_test_model(hparams)
         tf.summary.scalar(METRIC_ACCURACY, accuracy, step=1)

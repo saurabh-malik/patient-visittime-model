@@ -19,6 +19,8 @@ from model.encoder import get_normalization_layer
 from sklearn.model_selection import train_test_split
 from tensorboard.plugins.hparams import api as hp
 from model.training import train_and_evaluate
+from model.feature_generator import encode_feature
+from model.data_processing import load_data
 
 
 parser = argparse.ArgumentParser()
@@ -53,18 +55,10 @@ if __name__ == '__main__':
 
     # Create the input data pipeline
     logging.info("Creating the datasets...")
-    #data_dir = args.data_dir
-    #train_data_dir = os.path.join(data_dir, "train_signs")
-    #dev_data_dir = os.path.join(data_dir, "dev_signs")
 
-    #------------------------------------------------------------------------
-    #Update
-
-    #DataLoad & Split
+    ## ToDo Move Data load and split into seprate module . Done
     #Dataload
-    file = args.data_dir + "/visitdataclassification-4300.csv"
-    dataframe = pd.read_csv(file)
-    dataframe.head()
+    dataframe = load_data(args.data_dir, "/visitdataclassification-4300.csv")
 
     #Create Target Variable as One hot encode
     #onehotecode = pd.get_dummies(dataframe['TotalTimeInWindow-15'], prefix='timewindow', sparse=True)
@@ -89,31 +83,19 @@ if __name__ == '__main__':
     val_ds = df_to_dataset(val_x, val_y, shuffle=False, batch_size=batch_size)
     test_ds = df_to_dataset(test_x, test_y, shuffle=False, batch_size=batch_size)
 
+    data_set = {
+        'train_ds': train_ds,
+        'val_ds': val_ds,
+        'test_ds': test_ds,
+    }
 
+    ## ToDo Move Feature creation into seprate module. Done
     #Features
     numerical_features = ['AgeInMonths', 'Weight', 'NumberOfVisitsInProgress']
     categorical_features = [ 'AnimalClass', 'Sex', 'Day','AnimalBreed', 'AppointmentTypeName','AppointmentReasons']
-    encoded_features = []
-    all_inputs = []
-
-    #Numerical features.
-    for header in numerical_features:
-        numeric_col = tf.keras.Input(shape=(1,), name=header)
-        normalization_layer = get_normalization_layer(header, train_ds)
-        encoded_numeric_col = normalization_layer(numeric_col)
-        all_inputs.append(numeric_col)
-        encoded_features.append(encoded_numeric_col)
-
-    #Categorical features.
-    for header in categorical_features:
-      categorical_col = tf.keras.Input(shape=(1,), name=header, dtype='string')
-      encoding_layer = get_category_encoding_layer(name=header,
-                                                   dataset=train_ds,
-                                                   dtype='string',
-                                                   max_tokens=20)
-      encoded_categorical_col = encoding_layer(categorical_col)
-      all_inputs.append(categorical_col)
-      encoded_features.append(encoded_categorical_col)
+    
+    #Encoded features.
+    all_inputs, encoded_features = encode_feature(numerical_features, categorical_features, train_ds)
 
 
     train_inputs = {'all_inputs': all_inputs, 'encoded_features': encoded_features}
@@ -137,4 +119,4 @@ if __name__ == '__main__':
     #eval_model_spec = model_fn('eval', eval_inputs, params, reuse=True)
 
     #train and evaluate model
-    train_and_evaluate(waiting_model, args.data_dir, hparams)
+    train_and_evaluate(waiting_model, data_set, args.data_dir, hparams, params)
