@@ -9,7 +9,7 @@ import pandas as pd
 import matplotlib.pyplot
 
 import tensorflow as tf
-
+from model.custom_loss import Custom_CE_Loss
 from model.utils import Params
 from model.utils import set_logger
 from model.utils import df_to_dataset
@@ -21,6 +21,7 @@ from tensorboard.plugins.hparams import api as hp
 from model.training import train_and_evaluate
 from model.feature_generator import encode_feature
 from model.data_processing import load_data
+
 
 
 parser = argparse.ArgumentParser()
@@ -65,8 +66,7 @@ if __name__ == '__main__':
     onehotecode = pd.get_dummies(dataframe['TotalTimeInWindow-15'], prefix='timewindow', sparse=True)
     y = onehotecode.values
     output_shape = y.shape[1]
-
-    print('output_shape: ', output_shape)
+    
 
     #Drop Unused feature
     dataframe = dataframe.drop(columns=['TotalTimeInMin', 'VisitEnvelopeId', 'IsDropoffAppointment', 'TotalTimeInWindow-30', 'TotalTimeInWindow-15'])
@@ -78,16 +78,10 @@ if __name__ == '__main__':
 
     #train, val, test = np.split(dataframe.sample(frac=1), [int(0.8*len(dataframe)), int(0.9*len(dataframe))])
 
-    batch_size = params.batch_size
-    train_ds = df_to_dataset(train_x, train_y, batch_size=batch_size)
-    val_ds = df_to_dataset(val_x, val_y, shuffle=False, batch_size=batch_size)
-    test_ds = df_to_dataset(test_x, test_y, shuffle=False, batch_size=batch_size)
 
-    data_set = {
-        'train_ds': train_ds,
-        'val_ds': val_ds,
-        'test_ds': test_ds,
-    }
+
+    batch_size = params.batch_size
+    ds = df_to_dataset(dataframe, y, batch_size=batch_size)
 
     ## ToDo Move Feature creation into seprate module. Done
     #Features
@@ -95,7 +89,7 @@ if __name__ == '__main__':
     categorical_features = [ 'AnimalClass', 'Sex', 'Day','AnimalBreed', 'AppointmentTypeName','AppointmentReasons']
     
     #Encoded features.
-    all_inputs, encoded_features = encode_feature(numerical_features, categorical_features, train_ds)
+    all_inputs, encoded_features = encode_feature(numerical_features, categorical_features, ds)
 
 
     train_inputs = {'all_inputs': all_inputs, 'encoded_features': encoded_features}
@@ -108,15 +102,28 @@ if __name__ == '__main__':
     HP_LEARNINGRATE = hp.HParam('learning_rate', hp.Discrete([params.learning_rate]))
     METRIC_ACCURACY = 'accuracy'
     hparams = {
-          'HP_NUM_UNITS': params.num_units,
-          'HP_DROPOUT': params.dropout_rate,
-          'HP_LEARNINGRATE': params.learning_rate
+          HP_NUM_UNITS: params.num_units,
+          HP_DROPOUT: params.dropout_rate,
+          HP_LEARNINGRATE: params.learning_rate
       }
 
-    #print({h.name: hparams[h] for h in hparams})
+    train_ds = df_to_dataset(train_x, train_y, batch_size=batch_size)
+    val_ds = df_to_dataset(val_x, val_y, shuffle=False, batch_size=batch_size)
+    test_ds = df_to_dataset(test_x, test_y, shuffle=False, batch_size=batch_size)
 
-    waiting_model = model_fn('train', train_inputs, output_shape, hparams)
-    #eval_model_spec = model_fn('eval', eval_inputs, params, reuse=True)
+    data_set = {
+        'train_ds': train_ds,
+        'val_ds': val_ds,
+        'test_ds': test_ds,
+    }
+    log_dir = args.model_dir + '/logs/fit'
+    with tf.summary.create_file_writer(log_dir).as_default():
+        hp.hparams_config(
+            hparams=[HP_NUM_UNITS, HP_DROPOUT, HP_LEARNINGRATE],
+            metrics=[hp.Metric(METRIC_ACCURACY, display_name='Accuracy')],
+        )
 
+    waiting_model = model_fn('train', train_inputs, output_shape, hparams, HP_NUM_UNITS, HP_DROPOUT, HP_LEARNINGRATE)
+    run_name = 'final run'
     #train and evaluate model
-    train_and_evaluate(waiting_model, data_set, args.data_dir, hparams, params)
+    train_and_evaluate(waiting_model, data_set, log_dir, hparams, params, run_name)

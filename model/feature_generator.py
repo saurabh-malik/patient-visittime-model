@@ -4,6 +4,8 @@ from model.encoder import get_normalization_layer
 
 
 def encode_feature(numerical_features, categorical_features, dataset):
+	"""Function generating the encoded features
+	"""
 	encoded_features = []
 	all_inputs = []
 	#Numerical Feature

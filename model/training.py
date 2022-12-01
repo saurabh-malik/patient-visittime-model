@@ -3,7 +3,7 @@ import os
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as hp
 
-def train_and_evaluate(model, data_set, model_dir, hparams, params, restore_from=None):
+def train_and_evaluate(model, data_set, log_dir, hparams, params, run_name, restore_from=None):
     """Train the model and evaluate every epoch.
 
     Args:
@@ -17,16 +17,17 @@ def train_and_evaluate(model, data_set, model_dir, hparams, params, restore_from
     # Initialize tf.Saver instances to save weights during training
 
 
-    log_dir = model_dir + '/logs/fit'
-    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=0)
-    hpboard_callback = hp.KerasCallback(log_dir, hparams)
+    file = log_dir + '/' + run_name
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=file, histogram_freq=0)
+    hpboard_callback = hp.KerasCallback(file, hparams)
 
     train_ds = data_set['train_ds']
     val_ds = data_set['val_ds']
     test_ds = data_set['test_ds']
+    METRIC_ACCURACY = 'accuracy'
 
     logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
-    with tf.summary.create_file_writer(log_dir).as_default():
+    with tf.summary.create_file_writer(file).as_default():
         hp.hparams(hparams)  # record the values used in this trial
         model.fit(train_ds, epochs=params.num_epochs, validation_data = val_ds, callbacks=[tensorboard_callback, hpboard_callback])
         oss, accuracy = model.evaluate(test_ds)

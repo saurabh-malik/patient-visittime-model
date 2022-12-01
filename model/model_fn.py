@@ -4,12 +4,14 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorboard.plugins.hparams import api as hp
+from model.custom_loss import Custom_CE_Loss
 
-def build_model(is_training, output_shape, inputs, params):
+def build_model(is_training, output_shape, inputs, params, HP_NUM_UNITS, HP_DROPOUT,):
     """Compute logits of the model (output distribution)
 
     Args:
         is_training: (bool) whether we are training or not
+        output_shape: (int)
         inputs: (dict) contains the inputs of the graph (features, labels...)
                 this can be `tf.placeholder` or outputs of `tf.data`
         params: (Params) hyperparameters
@@ -21,8 +23,9 @@ def build_model(is_training, output_shape, inputs, params):
     all_features = tf.keras.layers.concatenate(inputs['encoded_features'])
     print(params)
     #Create HParams as model hyperparameter
-    hp_dropout = params['HP_DROPOUT']
-    hp_num_units = params['HP_NUM_UNITS']
+    print(params)
+    hp_dropout = params[HP_DROPOUT]
+    hp_num_units = params[HP_NUM_UNITS]
     
     x = tf.keras.layers.Dense(hp_num_units, activation="relu")(all_features)
     x=tf.keras.layers.Dropout(hp_dropout)(x)
@@ -56,13 +59,14 @@ def build_model(is_training, output_shape, inputs, params):
     return model
 
 
-def model_fn(mode, inputs, output_shape, params, reuse=False):
+def model_fn(mode, inputs, output_shape, params, HP_NUM_UNITS, HP_DROPOUT, HP_LEARNINGRATE, reuse=False):
     """Model function defining the graph operations.
 
     Args:
         mode: (string) can be 'train' or 'eval'
         inputs: (dict) contains the inputs of the graph (features, labels...)
                 this can be `tf.placeholder` or outputs of `tf.data`
+        output_shape: (int)
         params: (Params) contains hyperparameters of the model (ex: `params.learning_rate`)
         reuse: (bool) whether to reuse the weights
 
@@ -73,15 +77,15 @@ def model_fn(mode, inputs, output_shape, params, reuse=False):
 
     # -----------------------------------------------------------
     # MODEL: define the layers of the model
-    model = build_model(is_training, output_shape, inputs, params)
+    model = build_model(is_training, output_shape, inputs, params, HP_NUM_UNITS, HP_DROPOUT,)
 
     # Define loss and accuracy
-    loss = loss=tf.keras.losses.CategoricalCrossentropy(from_logits=False)
+    loss = Custom_CE_Loss()
     accuracy = ["accuracy"]
     optimizer = 'adam'
 
     #learning rate hyperparameter
-    hp_learningrate = params['HP_LEARNINGRATE']
+    hp_learningrate = params[HP_LEARNINGRATE]
 
     # Define training step that minimizes the loss with the Adam optimizer
     optimizer = tf.keras.optimizers.Adam(hp_learningrate)
