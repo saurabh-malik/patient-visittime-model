@@ -1,15 +1,15 @@
-"""Train the model"""
+"""Peform hyperparemeters search"""
 
 import argparse
-import logging
 import os
-import random
+from subprocess import check_call
+import sys
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot
+import logging
 
 import tensorflow as tf
-from model.custom_loss import Custom_CE_Loss
+
 from model.utils import Params
 from model.utils import set_logger
 from model.utils import df_to_dataset
@@ -21,10 +21,9 @@ from tensorboard.plugins.hparams import api as hp
 from model.training import train_and_evaluate
 from model.feature_generator import encode_feature
 from model.data_processing import load_data
-from ConvertToLanguage import convert_to_unstructure
 
 
-
+PYTHON = sys.executable
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_dir', default='experiments/test',
                     help="Experiment directory containing params.json")
@@ -34,8 +33,32 @@ parser.add_argument('--restore_from', default=None,
                     help="Optional, directory or file containing weights to reload before training")
 
 
-if __name__ == '__main__':
-    # Set the random seed for the whole graph for reproductible experiments
+def launch_training_job(parent_dir, data_dir, job_name, params):
+    """Launch training of the model with a set of hyperparameters in parent_dir/job_name
+
+    Args:
+        parent_dir: (string) directory containing config, weights and log
+        data_dir: (string) directory containing the dataset
+        params: (dict) containing hyperparameters
+    """
+    # Create a new folder in parent_dir with unique_name "job_name"
+    model_dir = os.path.join(parent_dir, job_name)
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+
+    # Write parameters in json file
+    json_path = os.path.join(model_dir, 'params.json')
+    params.save(json_path)
+
+    # Launch training with this config
+    cmd = "{python} train.py --model_dir {model_dir} --data_dir {data_dir}".format(python=PYTHON,
+            model_dir=model_dir, data_dir=data_dir)
+    print(cmd)
+    check_call(cmd, shell=True)
+
+
+if __name__ == "__main__":
+    # Load the "reference" parameters from parent_dir json file
     tf.random.set_seed(230)
 
     # Load the parameters from json file
@@ -62,15 +85,16 @@ if __name__ == '__main__':
     #Dataload
     dataframe = load_data(args.data_dir, "/visitdataclassification-4300.csv")
 
-    #data, class_y = convert_to_unstructure(dataframe)
-
-
     #Create Target Variable as One hot encode
     #onehotecode = pd.get_dummies(dataframe['TotalTimeInWindow-15'], prefix='timewindow', sparse=True)
     onehotecode = pd.get_dummies(dataframe['TotalTimeInWindow-15'], prefix='timewindow', sparse=True)
     y = onehotecode.values
     output_shape = y.shape[1]
-    
+    print(onehotecode)
+    print('Values')
+    print(y)
+
+    print('output_shape: ', output_shape)
 
     #Drop Unused feature
     dataframe = dataframe.drop(columns=['TotalTimeInMin', 'VisitEnvelopeId', 'IsDropoffAppointment', 'TotalTimeInWindow-30', 'TotalTimeInWindow-15'])
@@ -95,21 +119,7 @@ if __name__ == '__main__':
     #Encoded features.
     all_inputs, encoded_features = encode_feature(numerical_features, categorical_features, ds)
 
-
     train_inputs = {'all_inputs': all_inputs, 'encoded_features': encoded_features}
-
-    logging.info("Creating the model...")
-    #train_inputs()
-    #Hyperparameter
-    HP_NUM_UNITS = hp.HParam('num_units', hp.Discrete([params.num_units]))
-    HP_DROPOUT = hp.HParam('dropout_rate', hp.Discrete([params.dropout_rate]))
-    HP_LEARNINGRATE = hp.HParam('learning_rate', hp.Discrete([params.learning_rate]))
-    METRIC_ACCURACY = 'accuracy'
-    hparams = {
-          HP_NUM_UNITS: params.num_units,
-          HP_DROPOUT: params.dropout_rate,
-          HP_LEARNINGRATE: params.learning_rate
-      }
 
     train_ds = df_to_dataset(train_x, train_y, batch_size=batch_size)
     val_ds = df_to_dataset(val_x, val_y, shuffle=False, batch_size=batch_size)
@@ -120,6 +130,12 @@ if __name__ == '__main__':
         'val_ds': val_ds,
         'test_ds': test_ds,
     }
+
+    HP_NUM_UNITS = hp.HParam('num_units', hp.Discrete([32,64,95,128,180,256]))
+    HP_DROPOUT = hp.HParam('dropout', hp.RealInterval(0.3, 0.8))
+    HP_LEARNINGRATE = hp.HParam('learning_rate', hp.Discrete([1e-4, 1e-3, 1e-2]))
+    METRIC_ACCURACY = 'accuracy'
+
     log_dir = args.model_dir + '/logs/fit'
     with tf.summary.create_file_writer(log_dir).as_default():
         hp.hparams_config(
@@ -127,7 +143,19 @@ if __name__ == '__main__':
             metrics=[hp.Metric(METRIC_ACCURACY, display_name='Accuracy')],
         )
 
-    waiting_model = model_fn('train', train_inputs, output_shape, hparams, HP_NUM_UNITS, HP_DROPOUT, HP_LEARNINGRATE)
-    run_name = 'final run'
-    #train and evaluate model
-    #train_and_evaluate(waiting_model, data_set, log_dir, hparams, params, run_name)
+    session_num = 0
+
+    for num_units in HP_NUM_UNITS.domain.values:
+      for dropout_rate in (HP_DROPOUT.domain.min_value, HP_DROPOUT.domain.max_value):
+        for learning_rate in HP_LEARNINGRATE.domain.values:
+          hparams = {
+            HP_NUM_UNITS: num_units,
+            HP_DROPOUT: dropout_rate,
+            HP_LEARNINGRATE: learning_rate
+          }
+          run_name = "run-%d" % session_num
+          print('--- Starting trial: %s' % run_name)
+          #print({h.name: hparams[h] for h in hparams})
+          waiting_model = model_fn('train', train_inputs, output_shape, hparams, HP_NUM_UNITS, HP_DROPOUT, HP_LEARNINGRATE)
+          train_and_evaluate(waiting_model, data_set, log_dir, hparams, params, run_name)
+          session_num += 1

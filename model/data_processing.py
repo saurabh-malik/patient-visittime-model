@@ -1,4 +1,3 @@
-import random
 import numpy as np
 import pandas as pd
 
@@ -11,3 +10,5 @@ def load_data(data_dir, data_file_name):
     dataframe.head()
 
     return dataframe
+
+

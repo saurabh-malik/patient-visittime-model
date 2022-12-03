@@ -133,3 +133,5 @@ dmypy.json
 
 # experiments logs
 experiments/base_model/logs
+
+*DS_Store
