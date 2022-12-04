@@ -1,0 +1,11 @@
+name: env-visitmodel
+dependencies:
+  - python=3.10.6
+  - numpy=1.23.*
+  - tensorflow
+  - pip
+  - pip:
+    - tensorflow-text==2.10.*
+    - tf-models-official==2.7.0
+    - tensorflow-hub
+    - tensorflow-datasets

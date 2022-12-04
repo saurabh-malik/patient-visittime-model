@@ -11,4 +11,3 @@ def load_data(data_dir, data_file_name):
 
     return dataframe
 
-

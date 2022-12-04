@@ -1,21 +1,70 @@
 import os
-
-import numpy as np
-import matplotlib.pyplot as plt
+import shutil
+import pandas as pd
 
 import tensorflow as tf
-#import tensorflow_models as tfm
 import tensorflow_hub as hub
-import tensorflow_datasets as tfds
-#tfds.disable_progress_bar()
+import tensorflow_text as text
+from official.nlp import optimization  # to create AdamW optimizer
+from string import Template
+from sklearn.model_selection import train_test_split
 
-tf.get_logger().setLevel('ERROR')
+from model.data_processing import load_data
+from ConvertToLanguage import convert_to_unstructure
 
-#gs_folder_bert = "gs://cloud-tpu-checkpoints/bert/v3/uncased_L-12_H-768_A-12"
-#tf.io.gfile.listdir(gs_folder_bert)
+
+#import matplotlib.pyplot as plt
+AUTOTUNE = tf.data.AUTOTUNE
+batch_size = 64
+seed = 42
+#Load Data
+dataframe = load_data("data/visits", "/visitdataclassification-4300.csv")
+dataframe.head()
+train_x, hold_x = train_test_split(dataframe, test_size=0.30)
+
+processedFolder = "data/visits/train"
+if(os.path.exists(processedFolder) == False):
+    convert_to_unstructure(train_x)
+    convert_to_unstructure(hold_x, False)
+
+#
+raw_train_ds = tf.keras.utils.text_dataset_from_directory(
+    'data/visits/train',
+    batch_size=batch_size,
+    validation_split=0.2,
+    subset='training',
+    seed=seed)
+
+class_names = raw_train_ds.class_names
+train_ds = raw_train_ds.cache().prefetch(buffer_size=AUTOTUNE)
+
+val_ds = tf.keras.utils.text_dataset_from_directory(
+    'data/visits/train',
+    batch_size=batch_size,
+    validation_split=0.2,
+    subset='validation',
+    seed=seed)
+
+val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
+
+test_ds = tf.keras.utils.text_dataset_from_directory(
+    'data/visits/test',
+    batch_size=batch_size)
+
+test_ds = test_ds.cache().prefetch(buffer_size=AUTOTUNE)
+
+test_ds = test_ds.cache().prefetch(buffer_size=AUTOTUNE)
+
+
+for text_batch, label_batch in train_ds.take(1):
+  for i in range(3):
+    print(f'Review: {text_batch.numpy()[i]}')
+    label = label_batch.numpy()[i]
+    print(f'Label : {label} ({class_names[label]})')
 
 #Select Model
-bert_model_name = 'small_bert/bert_en_uncased_L-4_H-512_A-8' 
+#bert_model_name = 'small_bert/bert_en_uncased_L-4_H-512_A-8' 
+bert_model_name = 'bert_en_uncased_L-12_H-768_A-12' 
 
 map_name_to_handle = {
     'bert_en_uncased_L-12_H-768_A-12':
@@ -165,15 +214,56 @@ bert_model = hub.KerasLayer(tfhub_handle_encoder)
 
 bert_preprocess_model = hub.KerasLayer(tfhub_handle_preprocess)
 
-text_test = ['this is such an amazing movie!']
-text_preprocessed = bert_preprocess_model(text_test)
-
+#text_test = [train_sentence[0]]
+#text_preprocessed = bert_preprocess_model(text_test)
+'''
 print(f'Keys       : {list(text_preprocessed.keys())}')
 print(f'Shape      : {text_preprocessed["input_word_ids"].shape}')
 print(f'Word Ids   : {text_preprocessed["input_word_ids"][0, :12]}')
 print(f'Input Mask : {text_preprocessed["input_mask"][0, :12]}')
 print(f'Type Ids   : {text_preprocessed["input_type_ids"][0, :12]}')
+'''
+
+def build_classifier_model(classes):
+  text_input = tf.keras.layers.Input(shape=(), dtype=tf.string)
+  preprocessing_layer = hub.KerasLayer(tfhub_handle_preprocess, name='preprocessing')
+  encoder_inputs = preprocessing_layer(text_input)
+  encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='BERT_encoder')
+  outputs = encoder(encoder_inputs)
+  net = outputs['pooled_output']
+  net = tf.keras.layers.Dropout(0.3)(net)
+  net = tf.keras.layers.Dense(classes, activation=None, name='classifier')(net)
+  return tf.keras.Model(text_input, net)
 
 
 
+classifier_model = build_classifier_model(len(class_names))
+#bert_raw_result = classifier_model(tf.constant(text_test))
+#print(tf.sigmoid(bert_raw_result))
 
+#tf.keras.utils.plot_model(classifier_model)
+
+loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False,ignore_class=None,
+    name='sparse_categorical_crossentropy')
+metrics = tf.keras.metrics.SparseCategoricalAccuracy('accuracy', dtype=tf.float32)
+
+epochs = 20
+steps_per_epoch = tf.data.experimental.cardinality(train_ds).numpy()
+num_train_steps = steps_per_epoch * epochs
+num_warmup_steps = int(0.1*num_train_steps)
+
+#init_lr = 1e-3
+init_lr = 3e-5
+optimizer = optimization.create_optimizer(init_lr=init_lr,
+                                          num_train_steps=num_train_steps,
+                                          num_warmup_steps=num_warmup_steps,
+                                          optimizer_type='adamw')
+
+classifier_model.compile(optimizer=optimizer,
+                         loss=loss,
+                         metrics=metrics)
+
+print(f'Training model with {tfhub_handle_encoder}')
+history = classifier_model.fit(x=train_ds,
+                               validation_data=val_ds,
+                               epochs=epochs)

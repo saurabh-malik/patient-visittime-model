@@ -7,7 +7,7 @@ __pycache__/
 *.so
 
 # Data File
-data/visits/*.*
+data/visits/*
 
 # Distribution / packaging
 .Python
