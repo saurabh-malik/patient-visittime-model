@@ -135,7 +135,7 @@ dmypy.json
 experiments/base_model/logs
 
 *DS_Store
-bert_pretraining/*
+bert_pretraining/tmp/pretraining_output/*
 bertmodel/*
 trained-models/pretraining_output/*
 trained-models/language/*
