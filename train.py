@@ -6,7 +6,7 @@ import os
 import random
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot
+import matplotlib.pyplot as plt
 
 import tensorflow as tf
 from model.custom_loss import Custom_CE_Loss
@@ -14,7 +14,6 @@ from model.utils import Params
 from model.utils import set_logger
 from model.utils import df_to_dataset
 from model.model_fn import model_fn
-from model.encoder import get_category_encoding_layer
 from model.encoder import get_normalization_layer
 from sklearn.model_selection import train_test_split
 from tensorboard.plugins.hparams import api as hp
@@ -22,112 +21,441 @@ from model.training import train_and_evaluate
 from model.feature_generator import encode_feature
 from model.data_processing import load_data
 from ConvertToLanguage import convert_to_unstructure
-
+from tensorflow.keras.utils import plot_model
+#import seaborn as sns
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model_dir', default='experiments/test',
+parser.add_argument('--data_version', default='V2',
                     help="Experiment directory containing params.json")
-parser.add_argument('--data_dir', default='data',
+parser.add_argument('--data_dir', default='data/visits',
                     help="Directory containing the dataset")
-parser.add_argument('--restore_from', default=None,
+parser.add_argument('--check_point', default=None,
+                    help="Optional, previous training checkpoints")
+parser.add_argument('--model_type', default='DNN',
                     help="Optional, directory or file containing weights to reload before training")
 
 
 if __name__ == '__main__':
     # Set the random seed for the whole graph for reproductible experiments
-    tf.random.set_seed(230)
+    seed = 230
+    tf.random.set_seed(seed)
 
     # Load the parameters from json file
     args = parser.parse_args()
-    json_path = os.path.join(args.model_dir, 'params.json')
-    assert os.path.isfile(
-        json_path), "No json configuration file found at {}".format(json_path)
-    params = Params(json_path)
-
-    # Check that we are not overwriting some previous experiment
-    # Comment these lines if you are developing your model and don't care about overwritting
-    model_dir_has_best_weights = os.path.isdir(
-        os.path.join(args.model_dir, "best_weights"))
-    overwritting = model_dir_has_best_weights and args.restore_from is None
-    assert not overwritting, "Weights found in model_dir, aborting to avoid overwrite"
-
-    # Set the logger
-    set_logger(os.path.join(args.model_dir, 'train.log'))
-
-    # Create the input data pipeline
-    logging.info("Creating the datasets...")
-
-    ## ToDo Move Data load and split into seprate module . Done
+    
     #Dataload
-    dataframe = load_data(args.data_dir, "/visitdataclassification-4300.csv")
+    datafile = 'visitdataclassification_'+args.data_version+'.csv'
+    dataframe = load_data(args.data_dir, datafile)
+    dataframe.head()
 
-    #data, class_y = convert_to_unstructure(dataframe)
-
-
-    #Create Target Variable as One hot encode
-    #onehotecode = pd.get_dummies(dataframe['TotalTimeInWindow-15'], prefix='timewindow', sparse=True)
-    onehotecode = pd.get_dummies(dataframe['TotalTimeInWindow-15'], prefix='timewindow', sparse=True)
-    y = onehotecode.values
-    output_shape = y.shape[1]
-    
-
-    #Drop Unused feature
-    dataframe = dataframe.drop(columns=['TotalTimeInMin', 'VisitEnvelopeId', 'IsDropoffAppointment', 'TotalTimeInWindow-30', 'TotalTimeInWindow-15'])
-
-    #Split Data
-    
-    train_x, hold_x, train_y, hold_y = train_test_split(dataframe, y, test_size=0.40)
-    val_x, test_x, val_y, test_y = train_test_split(hold_x, hold_y, test_size=0.50)
-
-    #train, val, test = np.split(dataframe.sample(frac=1), [int(0.8*len(dataframe)), int(0.9*len(dataframe))])
+    #Model Type for Training
+    model_type = args.model_type
 
 
+    #Training for DNN (Baseline)
+    if(model_type == 'DNN'):
+        model_dir = 'experiments/base_model'
+        json_path = os.path.join(model_dir, 'params.json')
+        assert os.path.isfile(
+            json_path), "No configuration file found at {}".format(json_path)
+        params = Params(json_path)
 
-    batch_size = params.batch_size
-    ds = df_to_dataset(dataframe, y, batch_size=batch_size)
+        #load Configurable parameters
+        batch_size = params.batch_size
 
-    ## ToDo Move Feature creation into seprate module. Done
-    #Features
-    numerical_features = ['AgeInMonths', 'Weight', 'NumberOfVisitsInProgress']
-    categorical_features = [ 'AnimalClass', 'Sex', 'Day','AnimalBreed', 'AppointmentTypeName','AppointmentReasons']
-    
-    #Encoded features.
-    all_inputs, encoded_features = encode_feature(numerical_features, categorical_features, ds)
+        # Set the logger
+        set_logger(os.path.join(model_dir, 'train.log'))
+        
+        
+
+        # Create the data pipeline
+        logging.info("Creating the datasets...")
+        label_column = 'TotalTimeInWindow-15'
+
+        #Drop Unused feature
+        dataframe = dataframe.drop(columns=['TotalTimeInMin', 'VisitEnvelopeId', 'IsDropoffAppointment', 'NumberOfVisitsInProgress'])
+
+        #Create Target Variable as One hot encode
+        onehotecode = pd.get_dummies(dataframe[label_column], prefix='timewindow', sparse=True)
+        y = onehotecode.values
+        output_shape = y.shape[1]
+        
+        #Split Data into 60/20/20
+        train_x, hold_x, train_y, hold_y = train_test_split(dataframe, y, test_size=0.4)
+        val_x, test_x, val_y, test_y = train_test_split(hold_x, hold_y, test_size=0.5)
+
+        #Conversion to tensorflow datase
+        ds = df_to_dataset(dataframe, y, batch_size=batch_size)
+        train_ds = df_to_dataset(train_x, train_y, batch_size=batch_size)
+        val_ds = df_to_dataset(val_x, val_y, shuffle=False, batch_size=batch_size)
+        test_ds = df_to_dataset(test_x, test_y, shuffle=False, batch_size=batch_size)
 
 
-    train_inputs = {'all_inputs': all_inputs, 'encoded_features': encoded_features}
+        ## ToDo Move Feature creation into seprate module. Done
+        #Features
+        numerical_features = [ 'AgeInMonths','Weight']
+        categorical_features = [ 'AnimalClass', 'Sex', 'Day','AnimalBreed', 'AppointmentTypeName','AppointmentReasons']
+        
+        #Encoded features.
+        all_inputs, encoded_features = encode_feature(numerical_features, categorical_features, ds)
+        train_inputs = {'all_inputs': all_inputs, 'encoded_features': encoded_features}
 
-    logging.info("Creating the model...")
-    #train_inputs()
-    #Hyperparameter
-    HP_NUM_UNITS = hp.HParam('num_units', hp.Discrete([params.num_units]))
-    HP_DROPOUT = hp.HParam('dropout_rate', hp.Discrete([params.dropout_rate]))
-    HP_LEARNINGRATE = hp.HParam('learning_rate', hp.Discrete([params.learning_rate]))
-    METRIC_ACCURACY = 'accuracy'
-    hparams = {
-          HP_NUM_UNITS: params.num_units,
-          HP_DROPOUT: params.dropout_rate,
-          HP_LEARNINGRATE: params.learning_rate
-      }
+        logging.info("Creating the model...")
+        #Hyperparameter
+        HP_NUM_UNITS = hp.HParam('num_units', hp.Discrete([params.num_units]))
+        HP_DROPOUT = hp.HParam('dropout_rate', hp.Discrete([params.dropout_rate]))
+        HP_LEARNINGRATE = hp.HParam('learning_rate', hp.Discrete([params.learning_rate]))
+        METRIC_ACCURACY = 'accuracy'
+        hparams = {
+            HP_NUM_UNITS: params.num_units,
+            HP_DROPOUT: params.dropout_rate,
+            HP_LEARNINGRATE: params.learning_rate
+        }
 
-    train_ds = df_to_dataset(train_x, train_y, batch_size=batch_size)
-    val_ds = df_to_dataset(val_x, val_y, shuffle=False, batch_size=batch_size)
-    test_ds = df_to_dataset(test_x, test_y, shuffle=False, batch_size=batch_size)
+        ########## Till here
+        log_dir = ''
+        data_set = {
+            'train_ds': train_ds,
+            'val_ds': val_ds,
+            'test_ds': test_ds,
+        }
+        log_dir = model_dir + '/logs/fit'
+        with tf.summary.create_file_writer(log_dir).as_default():
+            hp.hparams_config(
+                hparams=[HP_NUM_UNITS, HP_DROPOUT, HP_LEARNINGRATE],
+                metrics=[hp.Metric(METRIC_ACCURACY, display_name='Accuracy')],
+            )
 
-    data_set = {
-        'train_ds': train_ds,
-        'val_ds': val_ds,
-        'test_ds': test_ds,
-    }
-    log_dir = args.model_dir + '/logs/fit'
-    with tf.summary.create_file_writer(log_dir).as_default():
-        hp.hparams_config(
-            hparams=[HP_NUM_UNITS, HP_DROPOUT, HP_LEARNINGRATE],
-            metrics=[hp.Metric(METRIC_ACCURACY, display_name='Accuracy')],
-        )
+        waiting_model = model_fn('train', train_inputs, output_shape, hparams, HP_NUM_UNITS, HP_DROPOUT, HP_LEARNINGRATE)
+        run_name = 'final run'
 
-    waiting_model = model_fn('train', train_inputs, output_shape, hparams, HP_NUM_UNITS, HP_DROPOUT, HP_LEARNINGRATE)
-    run_name = 'final run'
-    #train and evaluate model
-    #train_and_evaluate(waiting_model, data_set, log_dir, hparams, params, run_name)
+        train_and_evaluate(waiting_model, data_set, log_dir, hparams, params, run_name)
+
+    else:
+        #Model Type is Language Model (VLM)
+        model_dir = 'experiments/base_model'
+
+        json_path = os.path.join(model_dir, 'params.json')
+        assert os.path.isfile(
+            json_path), "No configuration file found at {}".format(json_path)
+        params = Params(json_path)
+
+        # Set the logger
+        set_logger(os.path.join(model_dir, 'train.log'))
+        log_dir = ''
+        ##########Till here
+
+        #Data Pipeline
+        train_x, hold_x = train_test_split(dataframe, test_size=0.20)
+
+
+        #data for pretrain
+        convert_to_unstructure_for_pretraining(dataframe)
+        processedFolder = "data/visits/train"
+        if(os.path.exists(processedFolder) == False):
+            convert_to_unstructure(train_x)
+            convert_to_unstructure(hold_x, False)
+
+        #
+        raw_train_ds = tf.keras.utils.text_dataset_from_directory(
+            'data/visits/train',
+            batch_size=params.batch_size,
+            validation_split=0.25,
+            subset='training',
+            seed=seed)
+
+        class_names = raw_train_ds.class_names
+        train_ds = raw_train_ds.cache().prefetch(buffer_size=AUTOTUNE)
+
+        val_ds = tf.keras.utils.text_dataset_from_directory(
+            'data/visits/train',
+            batch_size=params.batch_size,
+            validation_split=0.25,
+            subset='validation',
+            seed=seed)
+
+        val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
+
+        test_ds = tf.keras.utils.text_dataset_from_directory(
+            'data/visits/test',
+            batch_size=params.batch_size)
+
+        test_ds = test_ds.cache().prefetch(buffer_size=AUTOTUNE)
+
+        data_set = {
+                'train_ds': train_ds,
+                'val_ds': val_ds,
+                'test_ds': test_ds,
+            }
+
+        for text_batch, label_batch in train_ds.take(1):
+          for i in range(10):
+            print(f'Review: {text_batch.numpy()[i]}')
+            label = label_batch.numpy()[i]
+            print(f'Label : {label} ({class_names[label]})')
+
+        #Select Model
+        bert_model_name = 'small_bert/bert_en_uncased_L-4_H-512_A-8'
+
+        map_name_to_handle = {
+            'bert_en_uncased_L-12_H-768_A-12':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_L-12_H-768_A-12/3',
+            'bert_en_cased_L-12_H-768_A-12':
+                'https://tfhub.dev/tensorflow/bert_en_cased_L-12_H-768_A-12/3',
+            'bert_multi_cased_L-12_H-768_A-12':
+                'https://tfhub.dev/tensorflow/bert_multi_cased_L-12_H-768_A-12/3',
+            'small_bert/bert_en_uncased_L-2_H-128_A-2':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-2_H-128_A-2/1',
+            'small_bert/bert_en_uncased_L-2_H-256_A-4':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-2_H-256_A-4/1',
+            'small_bert/bert_en_uncased_L-2_H-512_A-8':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-2_H-512_A-8/1',
+            'small_bert/bert_en_uncased_L-2_H-768_A-12':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-2_H-768_A-12/1',
+            'small_bert/bert_en_uncased_L-4_H-128_A-2':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-128_A-2/1',
+            'small_bert/bert_en_uncased_L-4_H-256_A-4':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-256_A-4/1',
+            'small_bert/bert_en_uncased_L-4_H-512_A-8':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-512_A-8/1',
+            'small_bert/bert_en_uncased_L-4_H-768_A-12':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-768_A-12/1',
+            'small_bert/bert_en_uncased_L-6_H-128_A-2':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-6_H-128_A-2/1',
+            'small_bert/bert_en_uncased_L-6_H-256_A-4':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-6_H-256_A-4/1',
+            'small_bert/bert_en_uncased_L-6_H-512_A-8':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-6_H-512_A-8/1',
+            'small_bert/bert_en_uncased_L-6_H-768_A-12':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-6_H-768_A-12/1',
+            'small_bert/bert_en_uncased_L-8_H-128_A-2':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-8_H-128_A-2/1',
+            'small_bert/bert_en_uncased_L-8_H-256_A-4':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-8_H-256_A-4/1',
+            'small_bert/bert_en_uncased_L-8_H-512_A-8':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-8_H-512_A-8/1',
+            'small_bert/bert_en_uncased_L-8_H-768_A-12':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-8_H-768_A-12/1',
+            'small_bert/bert_en_uncased_L-10_H-128_A-2':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-10_H-128_A-2/1',
+            'small_bert/bert_en_uncased_L-10_H-256_A-4':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-10_H-256_A-4/1',
+            'small_bert/bert_en_uncased_L-10_H-512_A-8':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-10_H-512_A-8/1',
+            'small_bert/bert_en_uncased_L-10_H-768_A-12':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-10_H-768_A-12/1',
+            'small_bert/bert_en_uncased_L-12_H-128_A-2':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-12_H-128_A-2/1',
+            'small_bert/bert_en_uncased_L-12_H-256_A-4':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-12_H-256_A-4/1',
+            'small_bert/bert_en_uncased_L-12_H-512_A-8':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-12_H-512_A-8/1',
+            'small_bert/bert_en_uncased_L-12_H-768_A-12':
+                'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-12_H-768_A-12/1',
+            'albert_en_base':
+                'https://tfhub.dev/tensorflow/albert_en_base/2',
+            'electra_small':
+                'https://tfhub.dev/google/electra_small/2',
+            'electra_base':
+                'https://tfhub.dev/google/electra_base/2',
+            'experts_pubmed':
+                'https://tfhub.dev/google/experts/bert/pubmed/2',
+            'experts_wiki_books':
+                'https://tfhub.dev/google/experts/bert/wiki_books/2',
+            'talking-heads_base':
+                'https://tfhub.dev/tensorflow/talkheads_ggelu_bert_en_base/1',
+        }
+
+        map_model_to_preprocess = {
+            'bert_en_uncased_L-12_H-768_A-12':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'bert_en_cased_L-12_H-768_A-12':
+                'https://tfhub.dev/tensorflow/bert_en_cased_preprocess/3',
+            'small_bert/bert_en_uncased_L-2_H-128_A-2':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-2_H-256_A-4':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-2_H-512_A-8':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-2_H-768_A-12':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-4_H-128_A-2':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-4_H-256_A-4':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-4_H-512_A-8':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-4_H-768_A-12':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-6_H-128_A-2':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-6_H-256_A-4':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-6_H-512_A-8':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-6_H-768_A-12':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-8_H-128_A-2':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-8_H-256_A-4':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-8_H-512_A-8':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-8_H-768_A-12':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-10_H-128_A-2':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-10_H-256_A-4':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-10_H-512_A-8':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-10_H-768_A-12':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-12_H-128_A-2':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-12_H-256_A-4':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-12_H-512_A-8':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'small_bert/bert_en_uncased_L-12_H-768_A-12':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'bert_multi_cased_L-12_H-768_A-12':
+                'https://tfhub.dev/tensorflow/bert_multi_cased_preprocess/3',
+            'albert_en_base':
+                'https://tfhub.dev/tensorflow/albert_en_preprocess/3',
+            'electra_small':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'electra_base':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'experts_pubmed':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'experts_wiki_books':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+            'talking-heads_base':
+                'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+        }
+
+        tfhub_handle_encoder = map_name_to_handle[bert_model_name]
+        tfhub_handle_preprocess = map_model_to_preprocess[bert_model_name]
+
+        print(f'BERT model selected           : {tfhub_handle_encoder}')
+        print(f'Preprocess model auto-selected: {tfhub_handle_preprocess}')
+
+        bert_model = hub.KerasLayer(tfhub_handle_encoder)
+
+        bert_preprocess_model = hub.KerasLayer(tfhub_handle_preprocess)
+
+        checkpoint_path = "trained-models/pretraining_output/model.ckpt-20"
+
+        # Configure Hyperparameter for Language Model
+        HP_DROPOUT = hp.HParam('dropout_rate', hp.Discrete([params.dropout_rate]))
+        HP_LEARNINGRATE = hp.HParam('learning_rate', hp.Discrete([params.learning_rate]))
+        METRIC_ACCURACY = 'accuracy'
+        hparams = {
+              HP_DROPOUT: params.dropout_rate,
+              HP_LEARNINGRATE: params.learning_rate
+          }
+
+        def build_BERT_model():
+          text_input = tf.keras.layers.Input(shape=(), dtype=tf.string)
+          preprocessing_layer = hub.KerasLayer(tfhub_handle_preprocess, name='preprocessing')
+          encoder_inputs = preprocessing_layer(text_input)
+          encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='BERT_encoder')
+          outputs = encoder(encoder_inputs)
+          net = outputs['pooled_output']
+          model = tf.keras.Model(text_input, net)
+          checkpoint = tf.train.Checkpoint(model)
+          checkpoint.restore(checkpoint_path)
+          #model.load_weights(checkpoint_path)
+          return model
+
+        def build_classifier_model(classes,params, HP_DROPOUT):
+            drop_out = params[HP_DROPOUT]
+            text_input = tf.keras.layers.Input(shape=(), dtype=tf.string)
+            preprocessing_layer = hub.KerasLayer(tfhub_handle_preprocess, name='preprocessing')
+            encoder_inputs = preprocessing_layer(text_input)
+            encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='BERT_encoder')
+            outputs = encoder(encoder_inputs)
+            net = outputs['pooled_output']
+            net = tf.keras.layers.Dropout(drop_out)(net)
+            net = tf.keras.layers.Dense(classes, activation="softmax", name='classifier')(net)
+            model = tf.keras.Model(text_input, net)
+            checkpoint = tf.train.Checkpoint(model)
+            checkpoint.restore(checkpoint_path)
+            return model
+
+
+        #bert_model = build_BERT_model()
+        #save model
+        #bert_model.save('bertmodel')
+
+        language_model = build_classifier_model(len(class_names), hparams, HP_DROPOUT)
+        #bert_raw_result = language_model(tf.constant(text_test))
+        #print(tf.sigmoid(bert_raw_result))
+
+        #tf.keras.utils.plot_model(language_model)
+        
+        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False,ignore_class=None,
+            name='sparse_categorical_crossentropy')
+        
+        #loss = Custom_CE_Loss(gamma=0.1)
+        #metrics = tf.keras.metrics.Recall()
+        metrics = tf.keras.metrics.SparseCategoricalAccuracy('accuracy', dtype=tf.float32)
+
+        steps_per_epoch = tf.data.experimental.cardinality(train_ds).numpy()
+        num_train_steps = steps_per_epoch * params.num_epochs
+        num_warmup_steps = int(0.1*num_train_steps)
+
+        #init_lr = 1e-3
+        learning_rate = hparams[HP_LEARNINGRATE] 
+        optimizer = optimization.create_optimizer(init_lr=learning_rate,
+                                                  num_train_steps=num_train_steps,
+                                                  num_warmup_steps=num_warmup_steps,
+                                                  optimizer_type='adamw')
+
+        language_model.compile(optimizer=optimizer,
+                                 loss=loss,
+                                 metrics=metrics)
+
+        print(f'Training model with {tfhub_handle_encoder}')
+
+        #checkpoint
+        posttraining_checkpoint_path = "trained-models/language/training_CustomLoss_2/cp.ckpt"
+        checkpoint_dir = os.path.dirname(checkpoint_path)
+
+        #One Sample Testing
+        examples = [
+            #'A 29 months old, 50 lb, Male Dalmatian-Canine is checked-in on Monday in hospital for Exam Annual due to Vaccines.',  # this is the same sentence tried earlier
+            'A 45 months old, 72 lb, Male Labrador Retriever Mix-Canine is checked-in on Tuesday in hospital for Technician Appointment due to Exam.'
+        ]
+        original_results = tf.sigmoid(language_model(tf.constant(examples)))
+
+        #Train and evaluate
+        run_name+='_lr-'+str(learning_rate)+'_ep-'+str(params.num_epochs)
+        #language_model.summary()
+        train_and_evaluate(language_model, data_set, log_dir, hparams, params, run_name)
+
+        post_finetunning_results = tf.sigmoid(language_model(tf.constant(examples)))
+
+
+
+        #Uncomment below if you want to visualize the results pre and post training
+        '''
+        print('-----Model prediction-----')
+        print('Results from the model without training:')
+        print(original_results)
+        print_my_examples(examples, original_results)
+        plt.plot(original_results[0], linestyle = 'dotted')
+        plt.title('Visit Time Window before Fine Tunning distribution')
+        plt.show()
+
+        print('Results from the saved model:')
+        print(post_finetunning_results)
+        print_my_examples(examples, post_finetunning_results)
+        plt.plot(post_finetunning_results[0], linestyle = 'dotted')
+        plt.title('Visit Time Window Post Fine Tunning distribution')
+        plt.show()
+        '''
+
+
