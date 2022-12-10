@@ -4,7 +4,7 @@ _Author: Saurabh Malik_
 
 ## Task
 
-Given an patient's animal class, breed, reason for appointment,  predict the correct label.
+Given an patient's Demographics details, medical data and Hospital attributes, classify the patient's visit duration time.
 
 ## Dataset
 
@@ -30,7 +30,8 @@ data/
 }
 ```
 
-For every future experiments, we will create a new directory under `experiments` with a similar `params.json` file. 
+
+4. **Language Model (VLM)** VLM is a language model with a pre-trained Small BERT (L-4_H-512_A-8/1) and fine-tuned with a classification head.
 
 3. **Train** your experiment. Simply run
 
