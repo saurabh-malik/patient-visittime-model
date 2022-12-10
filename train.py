@@ -34,6 +34,10 @@ parser.add_argument('--check_point', default=None,
                     help="Optional, previous training checkpoints")
 parser.add_argument('--model_type', default='DNN',
                     help="Optional, directory or file containing weights to reload before training")
+parser.add_argument('--is_pretrain', default=0,
+                    help="Optional, Define whether pretrain the language model. Only relevant with VLM model_type")
+parser.add_argument('--BERT_Pretrain_Checkpoints', default="trained-models/pretraining_output/model.ckpt-20",
+                    help="Optional, Provide pretrained BERT model check point")
 
 
 if __name__ == '__main__':
@@ -66,8 +70,6 @@ if __name__ == '__main__':
 
         # Set the logger
         set_logger(os.path.join(model_dir, 'train.log'))
-        
-        
 
         # Create the data pipeline
         logging.info("Creating the datasets...")
@@ -91,7 +93,6 @@ if __name__ == '__main__':
         val_ds = df_to_dataset(val_x, val_y, shuffle=False, batch_size=batch_size)
         test_ds = df_to_dataset(test_x, test_y, shuffle=False, batch_size=batch_size)
 
-
         ## ToDo Move Feature creation into seprate module. Done
         #Features
         numerical_features = [ 'AgeInMonths','Weight']
@@ -112,9 +113,7 @@ if __name__ == '__main__':
             HP_DROPOUT: params.dropout_rate,
             HP_LEARNINGRATE: params.learning_rate
         }
-
-        ########## Till here
-        log_dir = ''
+       
         data_set = {
             'train_ds': train_ds,
             'val_ds': val_ds,
@@ -127,14 +126,16 @@ if __name__ == '__main__':
                 metrics=[hp.Metric(METRIC_ACCURACY, display_name='Accuracy')],
             )
 
+
         waiting_model = model_fn('train', train_inputs, output_shape, hparams, HP_NUM_UNITS, HP_DROPOUT, HP_LEARNINGRATE)
         run_name = 'final run'
 
         train_and_evaluate(waiting_model, data_set, log_dir, hparams, params, run_name)
 
-    else:
+    else if model_type == 'VLM':
         #Model Type is Language Model (VLM)
         model_dir = 'experiments/base_model'
+        data_dir = args.data_dir
 
         json_path = os.path.join(model_dir, 'params.json')
         assert os.path.isfile(
@@ -144,43 +145,39 @@ if __name__ == '__main__':
         # Set the logger
         set_logger(os.path.join(model_dir, 'train.log'))
         log_dir = ''
-        ##########Till here
 
         #Data Pipeline
         train_x, hold_x = train_test_split(dataframe, test_size=0.20)
 
 
-        #data for pretrain
-        convert_to_unstructure_for_pretraining(dataframe)
-        processedFolder = "data/visits/train"
-        if(os.path.exists(processedFolder) == False):
-            convert_to_unstructure(train_x)
-            convert_to_unstructure(hold_x, False)
+        #Data Conversion Structure to Unstructured text
+        #Train and Validation text
+        text_data_dir = data_dir+'language_model/'
+        # Test texts
+        if(os.path.exists(text_data_folder+'train') == False):
+            convert_to_unstructure(train_x, text_data_dir)
+        if(os.path.exists(text_data_folder+'test') == False):
+            convert_to_unstructure(hold_x, text_data_dir, False)
 
-        #
+        #Split is 0.25. i.e 0.20 of overall validation set from already splited 0.80 train data
         raw_train_ds = tf.keras.utils.text_dataset_from_directory(
-            'data/visits/train',
+            text_data_dir+'train',
             batch_size=params.batch_size,
             validation_split=0.25,
             subset='training',
             seed=seed)
-
-        class_names = raw_train_ds.class_names
-        train_ds = raw_train_ds.cache().prefetch(buffer_size=AUTOTUNE)
-
         val_ds = tf.keras.utils.text_dataset_from_directory(
-            'data/visits/train',
+            text_data_dir+'train',
             batch_size=params.batch_size,
             validation_split=0.25,
             subset='validation',
             seed=seed)
-
-        val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
-
         test_ds = tf.keras.utils.text_dataset_from_directory(
             'data/visits/test',
             batch_size=params.batch_size)
 
+        train_ds = raw_train_ds.cache().prefetch(buffer_size=AUTOTUNE)
+        val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
         test_ds = test_ds.cache().prefetch(buffer_size=AUTOTUNE)
 
         data_set = {
@@ -189,15 +186,10 @@ if __name__ == '__main__':
                 'test_ds': test_ds,
             }
 
-        for text_batch, label_batch in train_ds.take(1):
-          for i in range(10):
-            print(f'Review: {text_batch.numpy()[i]}')
-            label = label_batch.numpy()[i]
-            print(f'Label : {label} ({class_names[label]})')
+        class_names = raw_train_ds.class_names
 
-        #Select Model
+        #BERT Model for Finetune
         bert_model_name = 'small_bert/bert_en_uncased_L-4_H-512_A-8'
-
         map_name_to_handle = {
             'bert_en_uncased_L-12_H-768_A-12':
                 'https://tfhub.dev/tensorflow/bert_en_uncased_L-12_H-768_A-12/3',
@@ -266,7 +258,6 @@ if __name__ == '__main__':
             'talking-heads_base':
                 'https://tfhub.dev/tensorflow/talkheads_ggelu_bert_en_base/1',
         }
-
         map_model_to_preprocess = {
             'bert_en_uncased_L-12_H-768_A-12':
                 'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
@@ -335,7 +326,6 @@ if __name__ == '__main__':
             'talking-heads_base':
                 'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
         }
-
         tfhub_handle_encoder = map_name_to_handle[bert_model_name]
         tfhub_handle_preprocess = map_model_to_preprocess[bert_model_name]
 
@@ -346,7 +336,7 @@ if __name__ == '__main__':
 
         bert_preprocess_model = hub.KerasLayer(tfhub_handle_preprocess)
 
-        checkpoint_path = "trained-models/pretraining_output/model.ckpt-20"
+        pretrain_checkpoints = args.BERT_Pretrain_Checkpoints
 
         # Configure Hyperparameter for Language Model
         HP_DROPOUT = hp.HParam('dropout_rate', hp.Discrete([params.dropout_rate]))
@@ -357,7 +347,8 @@ if __name__ == '__main__':
               HP_LEARNINGRATE: params.learning_rate
           }
 
-        def build_BERT_model():
+        #Todo Remove the build_Pretrain_BERT_model. Not needed
+        def build_Pretrain_BERT_model():
           text_input = tf.keras.layers.Input(shape=(), dtype=tf.string)
           preprocessing_layer = hub.KerasLayer(tfhub_handle_preprocess, name='preprocessing')
           encoder_inputs = preprocessing_layer(text_input)
@@ -366,11 +357,11 @@ if __name__ == '__main__':
           net = outputs['pooled_output']
           model = tf.keras.Model(text_input, net)
           checkpoint = tf.train.Checkpoint(model)
-          checkpoint.restore(checkpoint_path)
-          #model.load_weights(checkpoint_path)
+          checkpoint.restore(pretrain_checkpoints)
           return model
 
-        def build_classifier_model(classes,params, HP_DROPOUT):
+        #ToDo Move into model_fn class
+        def build_vlm_model(classes,params, HP_DROPOUT, pretrain_checkpoints):
             drop_out = params[HP_DROPOUT]
             text_input = tf.keras.layers.Input(shape=(), dtype=tf.string)
             preprocessing_layer = hub.KerasLayer(tfhub_handle_preprocess, name='preprocessing')
@@ -382,32 +373,20 @@ if __name__ == '__main__':
             net = tf.keras.layers.Dense(classes, activation="softmax", name='classifier')(net)
             model = tf.keras.Model(text_input, net)
             checkpoint = tf.train.Checkpoint(model)
-            checkpoint.restore(checkpoint_path)
+            checkpoint.restore(pretrain_checkpoints)
             return model
 
+        language_model = build_vlm_model(len(class_names), hparams, HP_DROPOUT, pretrain_checkpoints)
 
-        #bert_model = build_BERT_model()
-        #save model
-        #bert_model.save('bertmodel')
-
-        language_model = build_classifier_model(len(class_names), hparams, HP_DROPOUT)
-        #bert_raw_result = language_model(tf.constant(text_test))
-        #print(tf.sigmoid(bert_raw_result))
-
-        #tf.keras.utils.plot_model(language_model)
         
+        #Defining the graph operation
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False,ignore_class=None,
             name='sparse_categorical_crossentropy')
-        
         #loss = Custom_CE_Loss(gamma=0.1)
-        #metrics = tf.keras.metrics.Recall()
         metrics = tf.keras.metrics.SparseCategoricalAccuracy('accuracy', dtype=tf.float32)
-
         steps_per_epoch = tf.data.experimental.cardinality(train_ds).numpy()
         num_train_steps = steps_per_epoch * params.num_epochs
         num_warmup_steps = int(0.1*num_train_steps)
-
-        #init_lr = 1e-3
         learning_rate = hparams[HP_LEARNINGRATE] 
         optimizer = optimization.create_optimizer(init_lr=learning_rate,
                                                   num_train_steps=num_train_steps,
@@ -418,44 +397,16 @@ if __name__ == '__main__':
                                  loss=loss,
                                  metrics=metrics)
 
+        #tf.keras.utils.plot_model(language_model)
         print(f'Training model with {tfhub_handle_encoder}')
 
         #checkpoint
-        posttraining_checkpoint_path = "trained-models/language/training_CustomLoss_2/cp.ckpt"
+        posttraining_checkpoint_path = "trained-models/language/training_VLM_2/cp.ckpt"
         checkpoint_dir = os.path.dirname(checkpoint_path)
-
-        #One Sample Testing
-        examples = [
-            #'A 29 months old, 50 lb, Male Dalmatian-Canine is checked-in on Monday in hospital for Exam Annual due to Vaccines.',  # this is the same sentence tried earlier
-            'A 45 months old, 72 lb, Male Labrador Retriever Mix-Canine is checked-in on Tuesday in hospital for Technician Appointment due to Exam.'
-        ]
-        original_results = tf.sigmoid(language_model(tf.constant(examples)))
 
         #Train and evaluate
         run_name+='_lr-'+str(learning_rate)+'_ep-'+str(params.num_epochs)
-        #language_model.summary()
         train_and_evaluate(language_model, data_set, log_dir, hparams, params, run_name)
 
-        post_finetunning_results = tf.sigmoid(language_model(tf.constant(examples)))
-
-
-
-        #Uncomment below if you want to visualize the results pre and post training
-        '''
-        print('-----Model prediction-----')
-        print('Results from the model without training:')
-        print(original_results)
-        print_my_examples(examples, original_results)
-        plt.plot(original_results[0], linestyle = 'dotted')
-        plt.title('Visit Time Window before Fine Tunning distribution')
-        plt.show()
-
-        print('Results from the saved model:')
-        print(post_finetunning_results)
-        print_my_examples(examples, post_finetunning_results)
-        plt.plot(post_finetunning_results[0], linestyle = 'dotted')
-        plt.title('Visit Time Window Post Fine Tunning distribution')
-        plt.show()
-        '''
-
-
+    else:
+        print('Provide model_type either DNN or VLM')
