@@ -7,27 +7,32 @@ import random
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
 import tensorflow as tf
+import tensorflow_hub as hub
+from tensorflow import keras
+import tensorflow_text
+from official.nlp import optimization  # to create AdamW optimizer
+from sklearn.model_selection import train_test_split
+from tensorboard.plugins.hparams import api as hp
+from tensorflow.keras.utils import plot_model
+
 from model.custom_loss import Custom_CE_Loss
 from model.utils import Params
 from model.utils import set_logger
 from model.utils import df_to_dataset
 from model.model_fn import model_fn
 from model.encoder import get_normalization_layer
-from sklearn.model_selection import train_test_split
-from tensorboard.plugins.hparams import api as hp
 from model.training import train_and_evaluate
 from model.feature_generator import encode_feature
 from model.data_processing import load_data
 from ConvertToLanguage import convert_to_unstructure
-from tensorflow.keras.utils import plot_model
+
 #import seaborn as sns
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_version', default='V2',
-                    help="Experiment directory containing params.json")
+                    help="Data version of patient visit CVS file")
 parser.add_argument('--data_dir', default='data/visits',
                     help="Directory containing the dataset")
 parser.add_argument('--check_point', default=None,
@@ -44,6 +49,7 @@ if __name__ == '__main__':
     # Set the random seed for the whole graph for reproductible experiments
     seed = 230
     tf.random.set_seed(seed)
+    AUTOTUNE = tf.data.AUTOTUNE
 
     # Load the parameters from json file
     args = parser.parse_args()
@@ -132,7 +138,7 @@ if __name__ == '__main__':
 
         train_and_evaluate(waiting_model, data_set, log_dir, hparams, params, run_name)
 
-    else if model_type == 'VLM':
+    elif model_type == 'VLM':
         #Model Type is Language Model (VLM)
         model_dir = 'experiments/base_model'
         data_dir = args.data_dir
@@ -154,9 +160,9 @@ if __name__ == '__main__':
         #Train and Validation text
         text_data_dir = data_dir+'language_model/'
         # Test texts
-        if(os.path.exists(text_data_folder+'train') == False):
+        if(os.path.exists(text_data_dir+'train') == False):
             convert_to_unstructure(train_x, text_data_dir)
-        if(os.path.exists(text_data_folder+'test') == False):
+        if(os.path.exists(text_data_dir+'test') == False):
             convert_to_unstructure(hold_x, text_data_dir, False)
 
         #Split is 0.25. i.e 0.20 of overall validation set from already splited 0.80 train data
@@ -173,7 +179,7 @@ if __name__ == '__main__':
             subset='validation',
             seed=seed)
         test_ds = tf.keras.utils.text_dataset_from_directory(
-            'data/visits/test',
+            text_data_dir+'test',
             batch_size=params.batch_size)
 
         train_ds = raw_train_ds.cache().prefetch(buffer_size=AUTOTUNE)
@@ -400,12 +406,8 @@ if __name__ == '__main__':
         #tf.keras.utils.plot_model(language_model)
         print(f'Training model with {tfhub_handle_encoder}')
 
-        #checkpoint
-        posttraining_checkpoint_path = "trained-models/language/training_VLM_2/cp.ckpt"
-        checkpoint_dir = os.path.dirname(checkpoint_path)
-
         #Train and evaluate
-        run_name+='_lr-'+str(learning_rate)+'_ep-'+str(params.num_epochs)
+        run_name = 'final run'
         train_and_evaluate(language_model, data_set, log_dir, hparams, params, run_name)
 
     else:
