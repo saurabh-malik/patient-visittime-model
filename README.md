@@ -18,7 +18,7 @@ data/
 
 
 ## Quickstart
-1. **Env Setup** 
+1. **Environment Setup** 
     1. Download Conda or MiniConda
     2. Create a conda environment using environment.yml file. 
         ```conda env create -f environment.yml```
