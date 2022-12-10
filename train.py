@@ -140,7 +140,7 @@ if __name__ == '__main__':
 
     elif model_type == 'VLM':
         #Model Type is Language Model (VLM)
-        model_dir = 'experiments/base_model'
+        model_dir = 'experiments/language_model'
         data_dir = args.data_dir
 
         json_path = os.path.join(model_dir, 'params.json')
