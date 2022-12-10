@@ -9,3 +9,5 @@ dependencies:
     - tf-models-official==2.7.0
     - tensorflow-hub
     - tensorflow-datasets
+    - tf_slim
+    

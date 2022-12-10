@@ -3,7 +3,7 @@ import os
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as hp
 
-def train_and_evaluate(model, data_set, log_dir, hparams, params, run_name, restore_from=None):
+def train_and_evaluate(model, data_set, log_dir, hparams, params, run_name, restore_from=None, store_checkpoint=False):
     """Train the model and evaluate every epoch.
 
     Args:
@@ -17,9 +17,16 @@ def train_and_evaluate(model, data_set, log_dir, hparams, params, run_name, rest
     # Initialize tf.Saver instances to save weights during training
 
 
-    file = log_dir + '/' + run_name
+    file = log_dir + '/logs/fit/' + run_name
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=file, histogram_freq=0)
     hpboard_callback = hp.KerasCallback(file, hparams)
+    print('FileName')
+    print(file)
+
+    checkpoint_path = log_dir + '/checkpoints'
+    cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
+                                                 save_weights_only=True,
+                                                 verbose=1)
 
     train_ds = data_set['train_ds']
     val_ds = data_set['val_ds']

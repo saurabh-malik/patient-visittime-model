@@ -86,4 +86,11 @@ def df_to_dataset(dataframe, labels, shuffle=True, batch_size=32):
     ds = ds.shuffle(buffer_size=len(dataframe))
   ds = ds.batch(batch_size)
   ds = ds.prefetch(batch_size)
-  return ds  
+  return ds 
+
+def print_my_examples(inputs, results):
+  result_for_printing = \
+    [f'input: {inputs[i]:<30} : score: {results[i][0]:.6f}'
+                         for i in range(len(inputs))]
+  print(*result_for_printing, sep='\n')
+  print() 
