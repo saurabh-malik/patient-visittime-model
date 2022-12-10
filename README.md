@@ -94,7 +94,40 @@ data/
     ```
 
 3. **Pre-train BERT on Visit Text Data**
+    For the Pre-training of the Small BERT (L-4_H-512_A-8/1), first of all we need to generate data from patient visits.
+    This data is availabe in pre-train-data.txt file. Run the following command for data generation.
 
-```
+    **Data Generation**
+    ```
+        python create_pretraining_data.py \
+      --input_file=./data/visits/pretrain/pre-train-data.txt \
+      --output_file=./trained-models/pretraining_output/tf_examples.tfrecord \
+      --vocab_file=$BERT_BASE_DIR/vocab.txt \
+      --do_lower_case=True \
+      --max_seq_length=128 \
+      --max_predictions_per_seq=20 \
+      --masked_lm_prob=0.15 \
+      --random_seed=12345 \
+      --dupe_factor=5
+
+    ```
     
-```
+    Next is the pretraining step.
+    **Pre-training**
+    ```
+    python run_pretraining.py \
+      --input_file=./trained-models/pretraining_output/tf_examples.tfrecord  \
+      --output_dir=./trained-models/pretraining_output/checkpoint \
+      --do_train=True \
+      --do_eval=True \
+      --bert_config_file=$BERT_BASE_DIR/bert_config.json \
+      --init_checkpoint=$BERT_BASE_DIR/bert_model.ckpt \
+      --train_batch_size=32 \
+      --max_seq_length=128 \
+      --max_predictions_per_seq=20 \
+      --num_train_steps=20 \
+      --num_warmup_steps=10 \
+      --learning_rate=2e-5
+  ```
+  
+ 
