@@ -136,5 +136,6 @@ data/
       --num_warmup_steps=10 \
       --learning_rate=2e-5
     ```
-  
- _$BERT_BASE_DIR = ../uncased_L-4_H-512_A-8 is the folder where we have downloaded Small BERT (L-4_H-512_A-8/1) for pre-train._
+  Note:
+ 1. _$BERT_BASE_DIR = ../uncased_L-4_H-512_A-8 is the folder where we have downloaded Small BERT (L-4_H-512_A-8/1) for pre-train._
+ 2. _Files related to BERT pre-pretraining module such as **create_pretraining_data.py**, **run_pretraining.py** etc are the modified version of files from original codebase (https://github.com/google-research/bert) to work with **Tensorflow V2, as original repo is in Tensorflow V1**._
