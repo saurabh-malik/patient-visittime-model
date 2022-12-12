@@ -7,16 +7,19 @@ def train_and_evaluate(model, data_set, log_dir, hparams, params, run_name, rest
     """Train the model and evaluate every epoch.
 
     Args:
-        train_model_spec: (dict) contains the graph operations or nodes needed for training
-        eval_model_spec: (dict) contains the graph operations or nodes needed for evaluation
-        model_dir: (string) directory containing config, weights and log
+        model: tf model to be trained
+        data_set: (dict) containing train_ds, val_ds, test_ds tf datsets
+        log_dir: (string) log directory path
+        hparams: (dict) containing hyper-parameters to be traced out in logs
         params: (Params) contains hyperparameters of the model.
-                Must define: num_epochs, train_size, batch_size, eval_size, save_summary_steps
+                Must define: num_epochs
+        run_name: (string) Name of the training run
         restore_from: (string) directory or file containing weights to restore the graph
+                Optional
+        store_checkpoint: (bool) Flag to control checkpoints save.
+                Optional
     """
     # Initialize tf.Saver instances to save weights during training
-
-
     file = log_dir + '/logs/fit/' + run_name
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=file, histogram_freq=0)
     hpboard_callback = hp.KerasCallback(file, hparams)
