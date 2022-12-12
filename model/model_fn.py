@@ -53,7 +53,7 @@ def model_fn(mode, inputs, output_shape, params, HP_NUM_UNITS, HP_DROPOUT, HP_LE
         reuse: (bool) whether to reuse the weights
 
     Returns:
-        model_spec: (dict) contains the graph operations or nodes needed for training / evaluation
+        model: model to be trained
     """
     is_training = (mode == 'train') 
 
@@ -73,16 +73,6 @@ def model_fn(mode, inputs, output_shape, params, HP_NUM_UNITS, HP_DROPOUT, HP_LE
 
     # Define training step that minimizes the loss with the Adam optimizer
     optimizer = tf.keras.optimizers.Adam(hp_learningrate)
-
-    #if is_training:
-        #global_step = tf.train.get_or_create_global_step()
-        #if params.use_batch_norm:
-            # Add a dependency to update the moving mean and variance for batch normalization
-            #with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
-                #train_op = optimizer.minimize(loss, global_step=global_step)
-        #else:
-            #train_op = optimizer.minimize(loss, global_step=global_step)
-
     model.compile(optimizer = optimizer, loss = loss, metrics = accuracy)
 
     return model

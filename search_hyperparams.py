@@ -29,6 +29,8 @@ parser.add_argument('--model_dir', default='experiments/test',
                     help="Experiment directory containing params.json")
 parser.add_argument('--data_dir', default='data',
                     help="Directory containing the dataset")
+parser.add_argument('--data_version', default='V2',
+                    help="Data version of patient visit CVS file")
 parser.add_argument('--restore_from', default=None,
                     help="Optional, directory or file containing weights to reload before training")
 
@@ -83,7 +85,8 @@ if __name__ == "__main__":
 
     ## ToDo Move Data load and split into seprate module . Done
     #Dataload
-    dataframe = load_data(args.data_dir, "/visitdataclassification-4300.csv")
+    datafile = 'visitdataclassification_'+args.data_version+'.csv'
+    dataframe = load_data(args.data_dir, datafile)
 
     #Create Target Variable as One hot encode
     #onehotecode = pd.get_dummies(dataframe['TotalTimeInWindow-15'], prefix='timewindow', sparse=True)
