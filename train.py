@@ -25,7 +25,7 @@ from model.encoder import get_normalization_layer
 from model.training import train_and_evaluate
 from model.feature_generator import encode_feature
 from model.data_processing import load_data
-from ConvertToLanguage import convert_to_unstructure
+from model.conversion import convert_to_unstructure
 
 #import seaborn as sns
 

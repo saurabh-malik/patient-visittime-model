@@ -15,8 +15,8 @@ from tensorflow import keras
 from tensorboard.plugins.hparams import api as hp
 
 from model.data_processing import load_data
-from ConvertToLanguage import convert_to_unstructure
-from ConvertToLanguage import convert_to_unstructure_for_pretraining
+from model.conversion import convert_to_unstructure
+from model.conversion import convert_to_unstructure_for_pretraining
 from model.utils import print_my_examples
 from model.custom_loss import Custom_CE_Loss
 from model.training import train_and_evaluate
