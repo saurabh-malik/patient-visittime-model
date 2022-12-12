@@ -137,4 +137,4 @@ data/
       --learning_rate=2e-5
   ```
   
- 
+ _$BERT_BASE_DIR is the folder where we have downloaded Small BERT (L-4_H-512_A-8/1) for pre-train._
