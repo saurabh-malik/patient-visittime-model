@@ -95,7 +95,14 @@ data/
 
 3. **Pre-train BERT on Visit Text Data**
     For the Pre-training of the Small BERT (L-4_H-512_A-8/1), first of all we need to generate data from patient visits.
-    This data is availabe in pre-train-data.txt file. Run the following command for data generation.
+    This data is availabe in pre-train-data.txt file. 
+    Note: To create pre-train-data.txt file run the following command.
+    ```
+    python  dataprocessing_pretrain.py --data_dir data/visits --data_version V2
+    ```
+    
+    
+    Run the following command for data generation.
 
     **Data Generation**
     ```
