@@ -18,11 +18,15 @@ def encode_feature(numerical_features, categorical_features, dataset):
 	
 	#Categorical Feature
 	for header in categorical_features:
+		isFreeText = False
+		if header=='AppointmentReasons':
+			isFreeText = True
 		categorical_col = tf.keras.Input(shape=(1,), name=header, dtype='string')
 		encoding_layer = get_category_encoding_layer(name=header,
                                                dataset=dataset,
                                                dtype='string',
-                                               max_tokens=20)
+                                               isFreeText=isFreeText,
+                                               max_tokens=250)
 		encoded_categorical_col = encoding_layer(categorical_col)
 		all_inputs.append(categorical_col)
 		encoded_features.append(encoded_categorical_col)

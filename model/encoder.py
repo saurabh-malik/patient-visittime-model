@@ -1,10 +1,13 @@
 import tensorflow as tf
 from tensorflow.keras import layers
 
-def get_category_encoding_layer(name, dataset, dtype, max_tokens=None):
+def get_category_encoding_layer(name, dataset, dtype, isFreeText=False, max_tokens=None):
   # Create a layer that turns strings into integer indices.
   if dtype == 'string':
-    index = layers.StringLookup(max_tokens=max_tokens)
+    if isFreeText:
+      index = layers.TextVectorization(max_tokens=max_tokens, split='whitespace')
+    else:
+      index = layers.TextVectorization(max_tokens=max_tokens, split=None)
   # Otherwise, create a layer that turns integer values into integer indices.
   else:
     index = layers.IntegerLookup(max_tokens=max_tokens)

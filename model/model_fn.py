@@ -19,39 +19,21 @@ def build_model(is_training, output_shape, inputs, params, HP_NUM_UNITS, HP_DROP
     Returns:
         output: (tf.Tensor) output of the model
     """
-    #Merge feature inputs into one vector
-    all_features = tf.keras.layers.concatenate(inputs['encoded_features'])
-    print(params)
+
     #Create HParams as model hyperparameter
-    print(params)
     hp_dropout = params[HP_DROPOUT]
     hp_num_units = params[HP_NUM_UNITS]
     
+    #Merge feature inputs into one vector
+    all_features = tf.keras.layers.concatenate(inputs['encoded_features'])
+
     x = tf.keras.layers.Dense(hp_num_units, activation="relu")(all_features)
+    x=tf.keras.layers.Dropout(0.8)(x)
+    x = tf.keras.layers.Dense(2500, activation="relu")(x)
     x=tf.keras.layers.Dropout(hp_dropout)(x)
-    x = tf.keras.layers.Dense(292, activation="relu")(x)
-    x=tf.keras.layers.Dropout(hp_dropout)(x)
-    x = tf.keras.layers.Dense(584, activation="relu")(x)
-    x=tf.keras.layers.Dropout(hp_dropout)(x)
-    x = tf.keras.layers.Dense(2336, activation="relu")(x)
-    x=tf.keras.layers.Dropout(hp_dropout)(x)
-    x = tf.keras.layers.Dense(4672, activation="relu")(x)
-    x=tf.keras.layers.Dropout(hp_dropout)(x)
-    x = tf.keras.layers.Dense(1168, activation="relu")(x)
-    x=tf.keras.layers.Dropout(hp_dropout)(x)
-    x = tf.keras.layers.Dense(584, activation="relu")(x)
-    x=tf.keras.layers.Dropout(hp_dropout)(x)
-    #x = tf.keras.layers.Dense(5000, activation="relu")(x)
-    #x=tf.keras.layers.Dropout(0.7)(x)
-    #x = tf.keras.layers.Dense(1000, activation="relu")(x)
-    #x=tf.keras.layers.Dropout(0.6)(x)
-    #x = tf.keras.layers.Dense(1200, activation="relu")(x)
-    #x=tf.keras.layers.Dropout(0.7)(x)
-    #x = tf.keras.layers.Dense(300, activation="relu")(x)
-    #x=tf.keras.layers.Dropout(0.7)(x)
-    #x = tf.keras.layers.Dense(190, activation="relu")(x)
-    #x=tf.keras.layers.Dropout(0.7)(x)
-    
+    x = tf.keras.layers.Dense(1500, activation="relu")(x)
+    x=tf.keras.layers.Dropout(0.1)(x)
+
     output = tf.keras.layers.Dense(output_shape, activation="softmax")(x)
 
     model = keras.Model(inputs['all_inputs'], output)
@@ -78,10 +60,12 @@ def model_fn(mode, inputs, output_shape, params, HP_NUM_UNITS, HP_DROPOUT, HP_LE
     # -----------------------------------------------------------
     # MODEL: define the layers of the model
     model = build_model(is_training, output_shape, inputs, params, HP_NUM_UNITS, HP_DROPOUT,)
-
+    alpha=0.5
     # Define loss and accuracy
-    loss = Custom_CE_Loss()
-    accuracy = ["accuracy"]
+    #loss = Custom_CE_Loss(alpha)
+    loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False, name='categorical_crossentropy' )
+    accuracy = tf.keras.metrics.CategoricalAccuracy('accuracy', dtype=tf.float32)
+    #accuracy = tf.keras.metrics.Recall(name = 'recall')
     optimizer = 'adam'
 
     #learning rate hyperparameter

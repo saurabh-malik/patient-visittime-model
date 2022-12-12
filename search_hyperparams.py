@@ -131,9 +131,9 @@ if __name__ == "__main__":
         'test_ds': test_ds,
     }
 
-    HP_NUM_UNITS = hp.HParam('num_units', hp.Discrete([32,64,95,128,180,256]))
-    HP_DROPOUT = hp.HParam('dropout', hp.RealInterval(0.3, 0.8))
-    HP_LEARNINGRATE = hp.HParam('learning_rate', hp.Discrete([1e-4, 1e-3, 1e-2]))
+    HP_NUM_UNITS = hp.HParam('num_units', hp.Discrete([250, 500, 100]))
+    HP_DROPOUT = hp.HParam('dropout', hp.RealInterval(0.4, 0.6))
+    HP_LEARNINGRATE = hp.HParam('learning_rate', hp.Discrete([1e-4, 1e-3, 1e-2, 1e-5, 1e-6, 3e-5]))
     METRIC_ACCURACY = 'accuracy'
 
     log_dir = args.model_dir + '/logs/fit'
@@ -146,14 +146,14 @@ if __name__ == "__main__":
     session_num = 0
 
     for num_units in HP_NUM_UNITS.domain.values:
-      for dropout_rate in (HP_DROPOUT.domain.min_value, HP_DROPOUT.domain.max_value):
+      for dropout_rate in np.arange(HP_DROPOUT.domain.min_value, HP_DROPOUT.domain.max_value, 0.1):
         for learning_rate in HP_LEARNINGRATE.domain.values:
           hparams = {
             HP_NUM_UNITS: num_units,
             HP_DROPOUT: dropout_rate,
             HP_LEARNINGRATE: learning_rate
           }
-          run_name = "run-%d" % session_num
+          run_name = "run__lr_"+str(learning_rate)+"__dr_"+str(dropout_rate)+"__No_"+str(num_units)
           print('--- Starting trial: %s' % run_name)
           #print({h.name: hparams[h] for h in hparams})
           waiting_model = model_fn('train', train_inputs, output_shape, hparams, HP_NUM_UNITS, HP_DROPOUT, HP_LEARNINGRATE)

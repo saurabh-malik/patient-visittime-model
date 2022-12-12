@@ -1,7 +1,9 @@
 {
     "learning_rate": 1e-3,
-    "dropout_rate":0.4,
-    "num_units": 73,
-    "batch_size": 512,
-    "num_epochs": 25
+    "int_dropout_rate":0.8,
+    "dropout_rate":0.9,
+    "fin_dropout_rate":0.1,
+    "num_units": 500,
+    "batch_size": 256,
+    "num_epochs": 50
 }
