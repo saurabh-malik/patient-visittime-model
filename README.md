@@ -42,7 +42,7 @@ data/
 **Train baseline model**
     To train baseline model run the following command:
     ```
-    python train.py --model_type DNN --data_dir data/visits data_version=V2
+    python train.py --model_type DNN --data_dir data/visits --data_version=V2
 
     ```
     **Monitor the training**
